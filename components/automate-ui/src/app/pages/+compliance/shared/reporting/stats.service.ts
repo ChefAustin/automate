@@ -18,6 +18,16 @@ export interface DateRange {
 
 export type ControlStatus = 'passed' | 'failed' | 'waived' | 'skipped';
 
+export class ReportCollection {
+  reports: any[];
+  totalReports: number;
+
+  constructor(reports: any[], totalReports: number) {
+    this.reports = reports;
+    this.totalReports = totalReports;
+  }
+}
+
 @Injectable()
 export class StatsService {
   constructor(
@@ -56,7 +66,7 @@ export class StatsService {
     const url = `${CC_API_URL}/reporting/stats/trend`;
     const interval = 86400;
 
-    const formatted = this.formatFilters(reportQuery);
+    const formatted = this.formatFilters(reportQuery, false);
     const body = {type: 'nodes', interval, filters: formatted};
 
     return this.httpClient.post<any>(url, body).pipe(
@@ -67,7 +77,7 @@ export class StatsService {
     const url = `${CC_API_URL}/reporting/stats/trend`;
     const interval = 86400;
 
-    const formatted = this.formatFilters(reportQuery);
+    const formatted = this.formatFilters(reportQuery, false);
     const body = {type: 'controls', interval, filters: formatted};
 
     return this.httpClient.post<any>(url, body).pipe(
@@ -183,9 +193,18 @@ export class StatsService {
   }
 
   getReports(reportQuery: ReportQuery, listParams: any): Observable<any> {
+      return this.getReportsWithPages(reportQuery, listParams, 1, 10).pipe(
+        map(reportCollection => reportCollection.reports));
+  }
+
+  getReportsWithPages(reportQuery: ReportQuery, listParams: any,
+    page: number, pageSize: number): Observable<ReportCollection> {
     const url = `${CC_API_URL}/reporting/reports`;
     const formatted = this.formatFilters(reportQuery);
-    let body = { filters: formatted };
+    let body = { filters: formatted,
+                 page,
+                 per_page: pageSize
+               };
 
     const {sort, order} = listParams;
     if (sort && order) {
@@ -193,7 +212,7 @@ export class StatsService {
     }
 
     return this.httpClient.post<any>(url, body).pipe(
-      map(({ reports }) => reports));
+      map(({ reports, total }) => new ReportCollection(reports, total)));
   }
 
   downloadReport(format: string, reportQuery: ReportQuery): Observable<string> {
@@ -258,7 +277,7 @@ export class StatsService {
     return filters;
   }
 
-  formatFilters(reportQuery: ReportQuery) {
+  formatFilters(reportQuery: ReportQuery, requestsLast24h = true) {
     const apiFilters = reportQuery.filters.reduce((formatted, filter) => {
         let type = filter['type']['name'];
         let value = filter['value']['id'] || filter['value']['text'];
@@ -312,6 +331,12 @@ export class StatsService {
         }
       return formatted;
     }, []);
+
+    // If last 24 hour interval is selected, exclude start_time and end_time
+    // from requests that return data from 24h search index.
+    if (reportQuery.last24h && requestsLast24h) {
+      return apiFilters;
+    }
 
     if (reportQuery.startDate) {
       const value = reportQuery.startDate.clone().utc().startOf('day');

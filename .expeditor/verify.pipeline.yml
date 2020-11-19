@@ -65,10 +65,11 @@ steps:
     expeditor:
       executor:
         docker:
-          image: returntocorp/semgrep:latest
+          image: returntocorp/semgrep:0.29.0
           entrypoint: semgrep
           command: [
             "--error",
+            "--exclude", "*.spec.ts",
             "--config", "/go/src/github.com/chef/automate/semgrep",
             "/go/src/github.com/chef/automate"
           ]
@@ -912,7 +913,6 @@ steps:
       - gopath-checkout#v1.0.1:
           import: github.com/chef/automate
 
-
   - label: "compliance-service upgrade from Automate v2v6"
     command:
       - sudo sysctl -w vm.max_map_count=262144 # Needed for ElasticSearch 6
@@ -939,3 +939,16 @@ steps:
     plugins:
       - gopath-checkout#v1.0.1:
           import: github.com/chef/automate
+
+  - label: "[unit] sample-data-service"
+    command:
+      - scripts/install_golang.sh
+      - cd components/sample-data-service
+      - make static
+    timeout_in_minutes: 10
+    retry:
+      automatic:
+        limit: 1
+    expeditor:
+      executor:
+        docker:
